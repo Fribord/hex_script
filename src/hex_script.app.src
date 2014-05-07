@@ -1,11 +1,11 @@
-{application, hex_debug,
+{application, hex_script,
  [
-  {description, "hex debug plugin"},
+  {description, "hex script plugin"},
   {vsn, git},
   {registered, []},
   {applications, [
                   kernel,
                   stdlib
                  ]},
-  {mod, { hex_debug_app, []}}
+  {mod, { hex_script_app, []}}
  ]}.

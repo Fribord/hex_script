@@ -71,15 +71,17 @@ mod_event(_, _) ->
 %%
 %% validate_event(in | out, Flags::[{atom(),term()}])
 %%
-validate_event(_Dir, _Flags) ->
-    ok.
+validate_event(Dir, Flags) ->
+    hex:validate_flags(Flags, event_spec(Dir)).
 
 %%
 %% return event specification in internal YANG format
 %% {Type,Value,Stmts}
 %%
-event_spec(_Dir) ->
-    [].
+event_spec(in) ->
+    [];
+event_spec(out) ->
+    [{leaf,command,[{type,string,[]},{mandatory,true,[]}]}].
 
 
 command(Command) when is_list(Command) ->
