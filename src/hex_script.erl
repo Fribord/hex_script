@@ -85,7 +85,7 @@ event_spec(out) ->
 
 
 command(Command) when is_list(Command) ->
-    Port = erlang:open_port({spawn,Command},[exit_status]),
+    Port = erlang:open_port({spawn,Command},[exit_status,eof]),
     wait_exit(Port).
 
 %% wait for command to exit properly
