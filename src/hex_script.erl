@@ -50,11 +50,8 @@ del_event(_Ref) ->
 %% output(Flags::[{atom(),term()}], Env::[{atom(),term()}]) ->
 %%    ok.
 %%
-output(Flags, _Env) ->
-    case proplists:get_value(command, Flags, undefined) of
-	undefined -> ok;
-	Command -> command(Command)
-    end.
+output(Flags, Env) ->
+    run_output(Flags, Env).
 
 %%
 %% init_event(in | out, Flags::[{atom(),term()}])
@@ -81,11 +78,47 @@ validate_event(Dir, Flags) ->
 event_spec(in) ->
     [];
 event_spec(out) ->
-    [{leaf,command,[{type,string,[]},{mandatory,true,[]}]}].
+    [{container,command,
+      [{leaf,os,[{type,string,[]}]},
+       {leaf,cmdline,[{type,string,[]},{mandatory,true,[]}]}
+      ]}].
+
+run_output([{command,Flags} | Commands], Env) ->
+    case proplists:get_value(os, Flags, "") of
+	"" ->
+	    cmdline(proplists:get_value(cmdline,Flags), Env),
+	    run_output(Commands, Env);
+	Regex ->
+	    case re:run(get_arch(), Regex, [{capture, none}]) of
+		match ->
+		    cmdline(proplists:get_value(cmdline,Flags), Env),
+		    run_output(Commands, Env);
+		nomatch ->
+		    run_output(Commands, Env)
+	    end
+    end;
+run_output([], _Env) ->
+    ok.
 
 
-command(Command) when is_list(Command) ->
-    Port = erlang:open_port({spawn,Command},[exit_status,eof]),
+%% generate architecture string for os match
+get_arch() ->
+    Words = wordsize(),
+    erlang:system_info(otp_release) ++ "-"
+        ++ erlang:system_info(system_architecture) ++ "-" ++ Words.
+
+wordsize() ->
+    try erlang:system_info({wordsize, external}) of
+        Val -> integer_to_list(8 * Val)
+    catch
+        error:badarg ->
+            integer_to_list(8 * erlang:system_info(wordsize))
+    end.
+
+
+cmdline(Cmdline0, Env) when is_list(Cmdline0) ->
+    Cmdline = hex:text_expand(Cmdline0, Env),
+    Port = erlang:open_port({spawn,Cmdline},[exit_status,eof]),
     wait_exit(Port).
 
 %% wait for command to exit properly
@@ -102,6 +135,3 @@ wait_exit(Port,Status) ->
 	{Port,{data,_Data}} ->
 	    wait_exit(Port,Status)
     end.
-
-
-	
