@@ -25,6 +25,8 @@
 
 -behaviour(hex_plugin).
 
+-include_lib("hex/include/hex.hrl").
+
 -export([validate_event/2, 
 	 event_spec/1,
 	 init_event/2,
@@ -80,25 +82,52 @@ event_spec(in) ->
 event_spec(out) ->
     [{container,command,
       [{leaf,os,[{type,string,[]}]},
-       {leaf,cmdline,[{type,string,[]},{mandatory,true,[]}]}
+       {leaf,cmdline,[{type,string,[]},{mandatory,true,[]}]},
+       {leaf,status,[{type,anyxml,[]}]}
       ]}].
 
 run_output([{command,Flags} | Commands], Env) ->
     case proplists:get_value(os, Flags, "") of
 	"" ->
-	    cmdline(proplists:get_value(cmdline,Flags), Env),
-	    run_output(Commands, Env);
+	    Status = cmdline(proplists:get_value(cmdline,Flags),Env),
+	    send_status(proplists:get_value(status,Flags,[]),
+			[{status,Status}|Env]),
+	    run_output(Commands,Env);
 	Regex ->
 	    case re:run(get_arch(), Regex, [{capture, none}]) of
 		match ->
-		    cmdline(proplists:get_value(cmdline,Flags), Env),
-		    run_output(Commands, Env);
+		    Status = cmdline(proplists:get_value(cmdline,Flags),Env),
+		    send_status(proplists:get_value(status,Flags,[]),
+				[{status,Status}|Env]),
+		    run_output(Commands,Env);
 		nomatch ->
-		    run_output(Commands, Env)
+		    run_output(Commands,Env)
 	    end
     end;
 run_output([], _Env) ->
     ok.
+
+send_status([], _Env) ->
+    ok;
+send_status([Sig], Env) ->
+    case hex_config:hex_pattern(Sig) of
+	{ok,P} ->
+	    Signal = #hex_signal {
+			id     = P#hex_pattern.id,
+			chan   = P#hex_pattern.chan,
+			type   = P#hex_pattern.type,  %% normally analog!
+			value  = if P#hex_pattern.value =:= [] ->
+					 status;
+				    true ->
+					 P#hex_pattern.value
+				 end,
+			source = hex_script
+		       },
+	    lager:info("send_status signal ~p", [Signal]),
+	    hex:event(Signal, Env);
+	Error ->
+	    lager:error("send_status signal ~p", [Error])
+    end.
 
 
 %% generate architecture string for os match
