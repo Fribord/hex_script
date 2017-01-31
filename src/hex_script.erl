@@ -53,6 +53,7 @@ del_event(_Ref) ->
 %%    ok.
 %%
 output(Flags, Env) ->
+    lager:debug("output ~p, ~p", [Flags, Env]),
     run_output(Flags, Env).
 
 %%
@@ -89,16 +90,12 @@ event_spec(out) ->
 run_output([{command,Flags} | Commands], Env) ->
     case proplists:get_value(os, Flags, "") of
 	"" ->
-	    Status = cmdline(proplists:get_value(cmdline,Flags),Env),
-	    send_status(proplists:get_value(status,Flags,[]),
-			[{status,Status}|Env]),
+	    run_command(Flags, Env),
 	    run_output(Commands,Env);
 	Regex ->
 	    case re:run(get_arch(), Regex, [{capture, none}]) of
 		match ->
-		    Status = cmdline(proplists:get_value(cmdline,Flags),Env),
-		    send_status(proplists:get_value(status,Flags,[]),
-				[{status,Status}|Env]),
+		    run_command(Flags, Env),
 		    run_output(Commands,Env);
 		nomatch ->
 		    run_output(Commands,Env)
@@ -106,6 +103,11 @@ run_output([{command,Flags} | Commands], Env) ->
     end;
 run_output([], _Env) ->
     ok.
+
+run_command(Flags, Env) ->
+    Status = cmdline(proplists:get_value(cmdline,Flags),Env),
+    send_status(proplists:get_value(status,Flags,[]),
+		[{status,Status}|Env]).
 
 send_status([], _Env) ->
     ok;
@@ -147,6 +149,7 @@ wordsize() ->
 
 cmdline(Cmdline0, Env) when is_list(Cmdline0) ->
     Cmdline = hex:text_expand(Cmdline0, Env),
+    lager:debug("command ~p", [Cmdline]),
     Port = erlang:open_port({spawn,Cmdline},[exit_status,eof]),
     wait_exit(Port).
 
@@ -157,9 +160,11 @@ wait_exit(Port) ->
 wait_exit(Port,Status) ->
     receive
 	{Port, {exit_status,Status1}} ->
+	    lager:debug("exit status ~p", [Status1]),
 	    wait_exit(Port,Status1);
 	{Port, eof} ->
 	    erlang:port_close(Port),
+	    lager:debug("port closed"),
 	    Status;
 	{Port,{data,_Data}} ->
 	    wait_exit(Port,Status)
